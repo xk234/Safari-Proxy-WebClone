@@ -1,0 +1,295 @@
+:root {
+  /* --- WALLPAPER DEFINITIONS (Defined Global) --- */
+  --wallpaper-dark: url('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop');
+  --wallpaper-light: url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop');
+
+  /* --- SAFARI DARK MODE (Default) --- */
+  --bg: #1e1e1e;
+  --window-bg: rgba(45, 45, 45, 0.75); 
+  --tab-bar-bg: rgba(35, 35, 35, 0.7);
+  --tab-active: rgba(80, 80, 80, 0.6);
+  --tab-inactive: transparent;
+  --tab-text: #FFFFFF;
+  --tab-text-inactive: #A0A0A0;
+  --urlbar-bg: rgba(80, 80, 80, 0.5);
+  --urlbar-text: #FFFFFF;
+  --urlbar-icon: #D0D0D0;
+  --icon-color: #E0E0E0;
+  --border: rgba(255, 255, 255, 0.12);
+  --menu-bg: rgba(40, 40, 40, 0.9);
+  --menu-hover: #007AFF;
+  --accent: #007AFF;
+  --ntp-text: #fff;
+  --glass-card: rgba(60, 60, 60, 0.4);
+  --shadow: 0 10px 30px rgba(0,0,0,0.5);
+   
+  /* Default Wallpaper */
+  --current-wallpaper: var(--wallpaper-dark);
+}
+
+body.light-mode {
+  /* --- SAFARI LIGHT MODE --- */
+  --bg: #E5E5E5;
+  --window-bg: rgba(245, 245, 245, 0.65);
+  --tab-bar-bg: rgba(230, 230, 230, 0.6);
+  --tab-active: rgba(255, 255, 255, 0.8);
+  --tab-inactive: transparent;
+  --tab-text: #000000;
+  --tab-text-inactive: #606060;
+  --urlbar-bg: rgba(255, 255, 255, 0.5);
+  --urlbar-text: #000000;
+  --urlbar-icon: #5C5C5C;
+  --icon-color: #333333;
+  --border: rgba(0, 0, 0, 0.1);
+  --menu-bg: rgba(255, 255, 255, 0.85);
+  --menu-hover: #007AFF;
+  --accent: #007AFF;
+  --ntp-text: #fff; 
+  --glass-card: rgba(255, 255, 255, 0.4);
+  --shadow: 0 10px 30px rgba(0,0,0,0.15);
+   
+  /* Light Wallpaper Override */
+  --current-wallpaper: var(--wallpaper-light);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+   
+  /* Apply the variable that changes based on class */
+  background-image: var(--current-wallpaper);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+   
+  background-color: var(--bg);
+  color: var(--tab-text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: background-image 0.4s ease-in-out;
+}
+
+/* --- UI CHROME --- */
+#browser-ui {
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 100;
+}
+
+/* 1. TOOLBAR */
+#nav-toolbar {
+  display: flex; align-items: center; padding: 8px 16px; gap: 10px;
+  background: var(--window-bg); height: 52px;
+  backdrop-filter: blur(25px) saturate(180%);
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.3s;
+}
+
+.nav-btn {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--icon-color);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.nav-btn:hover:not(:disabled) { background: rgba(128,128,128,0.2); }
+.nav-btn:disabled { opacity: 0.3; cursor: default; }
+.nav-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* URL Bar */
+#urlbar-container { flex: 1; position: relative; display: flex; justify-content: center; margin: 0 10px; }
+
+#urlbar-wrapper {
+  width: 100%; max-width: 700px;
+  display: flex; align-items: center;
+  background: var(--urlbar-bg);
+  border-radius: 8px;
+  height: 34px; padding: 0 8px;
+  transition: background 0.1s, box-shadow 0.1s;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+#urlbar-wrapper:focus-within {
+  background: var(--tab-text); 
+  color: var(--bg);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.4);
+}
+body:not(.light-mode) #urlbar-wrapper:focus-within #urlbar-input { color: #000; }
+body.light-mode #urlbar-wrapper:focus-within { background: #fff; }
+
+#urlbar-input {
+  flex: 1; background: transparent; border: none;
+  color: var(--urlbar-text); font-size: 13px; outline: none;
+  font-family: inherit; text-align: center;
+}
+#urlbar-wrapper:focus-within #urlbar-input { text-align: left; }
+
+.urlbar-icon {
+  color: var(--urlbar-icon); opacity: 0.8; padding: 4px;
+  border-radius: 4px; cursor: pointer; display: flex; align-items: center; border:none; background:transparent;
+}
+.urlbar-icon:hover { background: rgba(128,128,128,0.1); color: var(--accent); }
+.urlbar-icon svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+#url-spinner {
+  width: 14px; height: 14px; margin-right: 8px;
+  border: 2px solid rgba(128,128,128,0.3); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite; display: none;
+}
+.loading #url-spinner { display: block; }
+.loading #url-lock { display: none; }
+
+/* 2. TAB STRIP */
+#tabs-strip {
+  display: flex; align-items: flex-end; 
+  padding: 0 8px; height: 34px; gap: 2px;
+  background: var(--tab-bar-bg);
+  backdrop-filter: blur(25px) saturate(180%);
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  transition: height 0.2s, opacity 0.2s;
+}
+#tabs-strip.hidden {
+  height: 0; opacity: 0; overflow: hidden; padding: 0; border: none;
+}
+
+#tabs-container {
+  display: flex; flex: 1; overflow-x: auto; gap: 4px; scrollbar-width: none; align-items: stretch; height: 100%;
+}
+#tabs-container::-webkit-scrollbar { display: none; }
+
+.tab {
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 10px;
+  color: var(--tab-text-inactive);
+  background: var(--tab-inactive);
+  border-radius: 4px 4px 0 0;
+  min-width: 120px; max-width: 240px;
+  flex: 1; font-size: 12px; cursor: default;
+  position: relative; transition: 0.1s; border: none;
+}
+.tab:hover:not(.active) { background: rgba(128,128,128,0.2); }
+
+.tab.active {
+  background: var(--tab-active);
+  color: var(--tab-text);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+.tab-icon-area { width: 14px; height: 14px; margin-right: 6px; flex-shrink: 0; display:flex; align-items:center; }
+.tab-favicon { width: 14px; height: 14px; }
+.tab-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.tab-close {
+  width: 16px; height: 16px; border-radius: 4px; border: none;
+  background: transparent; color: inherit; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; font-size: 14px; margin-left: 6px;
+}
+.tab:hover .tab-close { opacity: 0.6; }
+.tab-close:hover { background: rgba(128,128,128,0.3); opacity: 1; }
+
+#tab-strip-plus {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none;
+  color: var(--icon-color) !important;
+  border-radius: 6px; cursor: pointer; flex-shrink: 0; margin-left: 6px; margin-bottom: 3px;
+}
+#tab-strip-plus:hover { background: rgba(128,128,128,0.25); }
+#tab-strip-plus svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+#bookmarks-bar { display: none; }
+
+/* POPUPS */
+.popup-menu {
+  position: absolute; top: 52px; width: 260px;
+  background: var(--menu-bg); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+  display: none; flex-direction: column; padding: 6px; z-index: 999;
+  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+}
+#menu-popup { right: 10px; }
+#bookmarks-popup { right: 50px; }
+
+.popup-menu.show { display: flex; animation: fadein 0.15s ease; }
+
+.menu-item {
+  padding: 6px 10px; display: flex; align-items: center; gap: 10px;
+  color: var(--tab-text); cursor: pointer; font-size: 13px; border-radius: 5px;
+}
+.menu-item:hover { background: var(--menu-hover); color: white; }
+.menu-sep { height: 1px; background: var(--border); margin: 4px 0; opacity: 0.5; }
+.menu-item img { width: 16px; height: 16px; border-radius: 3px; }
+
+#web-content { flex: 1; position: relative; background: #fff; }
+
+/* Iframe must be transparent for internal pages to see background */
+iframe.web-frame { 
+    width: 100%; height: 100%; border: none; display: none; 
+    background: transparent; 
+}
+iframe.web-frame.active { display: block; }
+
+#status-bar {
+  background: var(--window-bg); color: var(--icon-color); opacity: 0.9; font-size: 11px;
+  padding: 2px 10px; border-top: 1px solid var(--border); text-align: center;
+  backdrop-filter: blur(25px) saturate(180%); -webkit-backdrop-filter: blur(25px) saturate(180%);
+}
+
+/* --- START PAGE --- */
+.internal-page {
+  /* Wallpaper is reinjected here via JS for Iframe isolation */
+  background-image: var(--current-wallpaper);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  color: var(--ntp-text); height: 100%; width: 100%;
+  font-family: -apple-system, system-ui, sans-serif;
+  display: flex; flex-direction: column; align-items: center;
+  padding-top: 8vh; overflow-y: auto;
+  text-shadow: 0 2px 15px rgba(0,0,0,0.5);
+}
+
+.start-container { width: 100%; max-width: 900px; padding: 20px; }
+.section-title { font-size: 22px; font-weight: 700; margin-bottom: 20px; color: #fff; }
+
+.favorites-grid { display: flex; flex-wrap: wrap; gap: 32px; margin-bottom: 50px; }
+.fav-card {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  cursor: pointer; width: 80px; transition: transform 0.1s;
+}
+.fav-card:hover { transform: scale(1.05); }
+.fav-icon {
+  width: 68px; height: 68px; background: rgba(255,255,255,0.9); border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+}
+.fav-icon img { width: 40px; height: 40px; object-fit: contain; }
+.fav-label { 
+    font-size: 13px; font-weight: 500; text-align: center; color: #fff; 
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.privacy-card {
+  background: var(--glass-card);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-radius: 12px; padding: 20px;
+  box-shadow: var(--shadow);
+  display: flex; align-items: center; gap: 20px;
+  max-width: 400px; cursor: default; border: 1px solid rgba(255,255,255,0.1);
+}
+.shield-big { width: 40px; height: 40px; stroke: #fff; fill: none; stroke-width: 2; }
+.privacy-text h3 { margin: 0 0 4px 0; font-size: 15px; color: #fff; }
+.privacy-text p { margin: 0; font-size: 12px; opacity: 0.9; color: #fff; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadein { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
