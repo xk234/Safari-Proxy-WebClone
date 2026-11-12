@@ -36,3 +36,10 @@ A functional browser-in-a-browser web application built with vanilla web technol
 
 Because this project is built entirely with vanilla web technologies, there are no dependencies to install, package managers to configure, or build steps to run.
 Download and do whatever.
+
+
+## Wisp runtime and licensing
+
+The GX-derived relay manager is in `wisp-manager.js`. It pins the upstream `libcurl.js` 0.7.4 browser runtime and WASM through jsDelivr rather than copying the 2 MB GX inline bundle into this repository. The upstream LGPL-3.0-or-later notice and full license are included in `THIRD_PARTY_NOTICES.md` and `LICENSES/libcurl.js-LICENSE`.
+
+The public relay list is adapted from GX and should be treated as best-effort. A successful WebSocket handshake does not guarantee that a relay can proxy a real HTTPS request from this deployment origin.
