@@ -115,6 +115,102 @@
         </div>`;
   }
 
+
+  // Fetch parser-discovered resources through Wisp and expose them as same-origin
+  // blob URLs. Without this step, srcdoc's parser requests scripts/styles directly
+  // from their original hosts and the browser enforces their CORS headers.
+  async function rewriteHTMLResources(html, pageURL) {
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const base = new URL(pageURL);
+    let baseTag = parsed.querySelector("base[href]");
+    if (!baseTag) {
+      baseTag = parsed.createElement("base");
+      parsed.head.prepend(baseTag);
+    }
+    baseTag.href = pageURL;
+
+    const assetCache = new Map();
+    const skipURL = value => !value || /^(?:data:|blob:|javascript:|mailto:|tel:|#)/i.test(value.trim());
+
+    async function fetchBlobURL(rawURL, depth = 0) {
+      const absolute = new URL(rawURL, pageURL).href;
+      if (skipURL(absolute) || depth > 3) return rawURL;
+      if (assetCache.has(absolute)) return assetCache.get(absolute);
+      const task = (async () => {
+        const response = await GXWisp.fetch(absolute, { headers: { "Accept": "*/*" } });
+        if (!response.ok) throw new Error("HTTP " + response.status + " for " + absolute);
+        const type = response.headers.get("content-type") || "";
+        if (type.includes("text/css") || /\.css(?:[?#]|$)/i.test(absolute)) {
+          const css = await response.text();
+          const rewritten = await rewriteCSS(css, absolute, depth + 1);
+          return URL.createObjectURL(new Blob([rewritten], { type: type || "text/css" }));
+        }
+        const blob = await response.blob();
+        return URL.createObjectURL(blob);
+      })();
+      assetCache.set(absolute, task);
+      try { return await task; }
+      catch (error) {
+        assetCache.delete(absolute);
+        console.warn("[GX rewrite] Resource failed:", absolute, error);
+        throw error;
+      }
+    }
+
+    async function rewriteCSS(css, stylesheetURL, depth) {
+      const pattern = /url\(\s*(?:(["'])(.*?)\1|([^)]*?))\s*\)/gi;
+      const matches = [...css.matchAll(pattern)];
+      let output = css;
+      for (const match of matches) {
+        const raw = (match[2] || match[3] || "").trim();
+        if (skipURL(raw)) continue;
+        try {
+          const blobURL = await fetchBlobURL(new URL(raw, stylesheetURL).href, depth);
+          output = output.replace(match[0], 'url("' + blobURL + '")');
+        } catch (_) {
+          output = output.replace(match[0], "url(data:,)");
+        }
+      }
+      const imports = [...output.matchAll(/@import\s+(["'])(.*?)\1/gi)];
+      for (const match of imports) {
+        try {
+          const blobURL = await fetchBlobURL(new URL(match[2], stylesheetURL).href, depth);
+          output = output.replace(match[0], '@import url("' + blobURL + '")');
+        } catch (_) {
+          output = output.replace(match[0], "");
+        }
+      }
+      return output;
+    }
+
+    const tasks = [];
+    for (const node of parsed.querySelectorAll("script[src],link[href],img[src],source[src],video[poster],audio[src],track[src],input[src]")) {
+      const tag = node.tagName.toLowerCase();
+      let attr = tag === "link" ? "href" : tag === "video" ? "poster" : "src";
+      const rel = (node.getAttribute("rel") || "").toLowerCase();
+      if (tag === "link" && /(?:preload|prefetch|dns-prefetch|preconnect)/.test(rel)) {
+        node.remove();
+        continue;
+      }
+      const raw = node.getAttribute(attr);
+      if (skipURL(raw)) continue;
+      tasks.push((async () => {
+        try {
+          const blobURL = await fetchBlobURL(new URL(raw, pageURL).href);
+          node.setAttribute(attr, blobURL);
+          node.removeAttribute("crossorigin");
+          node.removeAttribute("integrity");
+        } catch (_) {
+          if (tag === "script" || (tag === "link" && rel === "stylesheet")) node.remove();
+          else node.removeAttribute(attr);
+        }
+      })());
+    }
+    await Promise.all(tasks);
+    const doctype = parsed.doctype ? "<!doctype " + parsed.doctype.name + ">" : "<!doctype html>";
+    return doctype + parsed.documentElement.outerHTML;
+  }
+
   async function navigate(tab, url) {
     tab.loading = true;
     tab.url = url;
@@ -143,6 +239,7 @@
          else content = `<base href="${url}">` + content;
        }
 
+       content = await rewriteHTMLResources(content, url);
        content = injectWispBridge(content);
        const frame = $(`#frame-${tab.id}`);
        frame.removeAttribute("srcdoc");
