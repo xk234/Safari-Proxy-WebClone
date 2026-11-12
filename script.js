@@ -200,6 +200,36 @@
         }
       })());
     }
+
+    // Responsive images and inline/style-block CSS are parser-discovered too.
+    for (const node of parsed.querySelectorAll("[srcset]")) {
+      tasks.push((async () => {
+        const raw = node.getAttribute("srcset") || "";
+        const candidates = raw.split(",").map(part => part.trim()).filter(Boolean);
+        const rewritten = await Promise.all(candidates.map(async part => {
+          const bits = part.split(/\\s+/);
+          const source = bits.shift();
+          if (skipURL(source)) return part;
+          try {
+            const blob = await fetchBlobURL(new URL(source, pageURL).href);
+            return [blob, ...bits].join(" ");
+          } catch (_) { return part; }
+        }));
+        node.setAttribute("srcset", rewritten.join(", "));
+      })());
+    }
+    for (const node of parsed.querySelectorAll("[style]")) {
+      tasks.push((async () => {
+        const css = node.getAttribute("style") || "";
+        node.setAttribute("style", await rewriteCSS(css, pageURL, 1));
+      })());
+    }
+    for (const node of parsed.querySelectorAll("style")) {
+      tasks.push((async () => {
+        node.textContent = await rewriteCSS(node.textContent || "", pageURL, 1);
+      })());
+    }
+
     await Promise.all(tasks);
     const doctype = parsed.doctype ? "<!doctype " + parsed.doctype.name + ">" : "<!doctype html>";
     return doctype + parsed.documentElement.outerHTML;
