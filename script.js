@@ -90,8 +90,8 @@
       'window.fetch=routeFetch;' +
       'document.addEventListener("click",function(ev){var a=ev.target.closest&&ev.target.closest("a[href]");if(!a||a.hasAttribute("download"))return;var target=a.getAttribute("target");if(target&&target!=="_self")return;var u=new URL(a.href,document.baseURI);if(u.protocol!=="http:"&&u.protocol!=="https:")return;var b=new URL(document.baseURI);if(u.origin===b.origin&&u.pathname===b.pathname&&u.search===b.search)return;ev.preventDefault();window.parent.navigateActiveTab(u.href);},true);' +
       'document.addEventListener("submit",function(ev){var f=ev.target;if(!f||String(f.method||"get").toLowerCase()!=="get")return;var u=new URL(f.action||document.baseURI,document.baseURI);var q=new URLSearchParams(new FormData(f));u.search=q.toString();ev.preventDefault();window.parent.navigateActiveTab(u.href);},true);' +
-      '}catch(e){console.warn("Wisp page bridge:",e);}})();<\\/script>';
-    return /<\\/body\\s*>/i.test(html) ? html.replace(/<\\/body\\s*>/i, bridge + "</body>") : html + bridge;
+      '}catch(e){console.warn("Wisp page bridge:",e);}})();<\/script>';
+    return /<\/body\s*>/i.test(html) ? html.replace(/<\/body\s*>/i, bridge + "</body>") : html + bridge;
   }
 
 
