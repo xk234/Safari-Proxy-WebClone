@@ -87,14 +87,29 @@
       document.head.appendChild(script);
     });
   }
+  let runtimeScriptPromise = null;
   async function ensureRuntime() {
-    if (window.libcurl && window.libcurl.ready) return window.libcurl;
-    if (!runtimePromise) runtimePromise = (async () => {
-      if (!window.libcurl) await loadScript(LIBCURL_JS);
-      if (!window.libcurl) throw new Error("libcurl.js did not expose window.libcurl");
-      await window.libcurl.load_wasm(LIBCURL_WASM);
-      return window.libcurl;
-    })().catch(error => { runtimePromise = null; throw error; });
+    if (window.GXLibcurl && window.GXLibcurl.ready) return window.GXLibcurl;
+    if (!runtimeScriptPromise) {
+      runtimeScriptPromise = (async () => {
+        await loadScript(LIBCURL_JS);
+        await loadScript("libcurl-bridge.js");
+        if (!window.GXLibcurl) throw new Error("libcurl bridge did not expose the GX runtime");
+        return window.GXLibcurl;
+      })();
+    }
+    if (!runtimePromise) {
+      runtimePromise = runtimeScriptPromise
+        .then(async runtime => {
+          if (!runtime.ready) await runtime.load_wasm(LIBCURL_WASM);
+          if (!runtime.ready) throw new Error("libcurl.js WASM initialization did not complete");
+          return runtime;
+        })
+        .catch(error => {
+          runtimePromise = null;
+          throw error;
+        });
+    }
     return runtimePromise;
   }
   function getSession(libcurl, relay) {
