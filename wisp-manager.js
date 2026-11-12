@@ -34,6 +34,7 @@
   let runtimePromise = null;
   let activeRelay = "";
   let requestQueue = Promise.resolve();
+  const sessions = new Map();
 
   const storage = {
     get(key) { try { return localStorage.getItem(key); } catch (_) { return null; } },
@@ -96,13 +97,30 @@
     })().catch(error => { runtimePromise = null; throw error; });
     return runtimePromise;
   }
+  function getSession(libcurl, relay) {
+    let session = sessions.get(relay);
+    if (!session) {
+      session = new libcurl.HTTPSession({ enable_cookies: true });
+      session.set_connections(24, 18, 8);
+      sessions.set(relay, session);
+    }
+    return session;
+  }
   async function fetchOnce(libcurl, relay, url, options) {
     libcurl.set_websocket(relay);
+    const session = getSession(libcurl, relay);
     const controller = new AbortController();
+    const externalSignal = options && options.signal;
+    const onAbort = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) controller.abort();
+      else externalSignal.addEventListener("abort", onAbort, { once: true });
+    }
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
     const started = performance.now();
     try {
-      const response = await libcurl.fetch(url, { ...options, signal: options && options.signal || controller.signal });
+      const fetchOptions = { ...(options || {}), signal: controller.signal };
+      const response = await session.fetch(url, fetchOptions);
       const bytes = await response.arrayBuffer();
       const latency = performance.now() - started;
       rememberResult(relay, hostOf(url), true, latency);
@@ -110,15 +128,19 @@
       return new Response(bytes, { status: response.status, statusText: response.statusText, headers: response.headers });
     } catch (error) {
       rememberResult(relay, hostOf(url), false, 0);
+      try { session.close(); } catch (_) {}
+      sessions.delete(relay);
       throw error;
     } finally {
       clearTimeout(timeout);
+      if (externalSignal) externalSignal.removeEventListener("abort", onAbort);
     }
   }
   async function fetchInternal(url, options = {}) {
     const libcurl = await ensureRuntime();
     const host = hostOf(url);
     const candidates = rankPoolCandidates(host);
+    if (activeRelay) candidates.sort((a, b) => Number(b.url === activeRelay) - Number(a.url === activeRelay));
     if (!candidates.length) throw new Error("No Wisp relays are currently eligible; wait for cooldown or reset the relay pool.");
     const errors = [];
     for (const candidate of candidates) {
@@ -140,6 +162,7 @@
     if (!value) { storage.set(STORE.preferred, ""); return; }
     if (!/^wss:\/\//i.test(value)) throw new Error("Wisp relay must begin with wss://");
     storage.set(STORE.preferred, value.replace(/\s+/g, ""));
+    activeRelay = "";
   }
   function openSettings() {
     const current = storage.get(STORE.preferred) || activeRelay || DEFAULTS[0];
@@ -166,6 +189,13 @@
     getWispPool,
     get activeRelay() { return activeRelay; },
     openSettings,
-    reset() { storage.set(STORE.preferred, ""); storage.set(STORE.fastest, ""); storage.set(STORE.health, "{}"); }
+    reset() {
+      storage.set(STORE.preferred, "");
+      storage.set(STORE.fastest, "");
+      storage.set(STORE.health, "{}");
+      activeRelay = "";
+      for (const session of sessions.values()) { try { session.close(); } catch (_) {} }
+      sessions.clear();
+    }
   };
 })();
