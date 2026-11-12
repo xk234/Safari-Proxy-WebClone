@@ -5,8 +5,6 @@
  */
 (() => {
   "use strict";
-  const LIBCURL_JS = "https://cdn.jsdelivr.net/npm/libcurl.js@0.7.4/libcurl.js";
-  const LIBCURL_WASM = "https://cdn.jsdelivr.net/npm/libcurl.js@0.7.4/libcurl.wasm";
   const DEFAULTS = [
   "wss://wisp.rhw.one/wisp/",
   "wss://definitelyscience.com/wisp/",
@@ -77,65 +75,14 @@
     writeHealth(health);
     if (ok) storage.set(STORE.fastest, url);
   }
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = src;
-      script.async = true;
-      script.onload = resolve;
-      script.onerror = () => reject(new Error("Could not load libcurl.js from " + src));
-      document.head.appendChild(script);
-    });
-  }
-  function getRuntimeState() {
-    // Shared on window so duplicate adapter instances cannot inject libcurl twice.
-    if (!window[RUNTIME_STATE_KEY]) {
-      window[RUNTIME_STATE_KEY] = { scriptPromise: null, wasmPromise: null };
-    }
-    return window[RUNTIME_STATE_KEY];
-  }
   async function ensureRuntime() {
-    const state = getRuntimeState();
-    let existing = window.GXLibcurl || null;
-
-    // libcurl.js declares a top-level lexical "const libcurl", not window.libcurl.
-    // A later classic script can still see that binding, so reuse it before injecting.
-    if (!existing) {
-      try {
-        if (typeof libcurl !== "undefined") existing = libcurl;
-      } catch (_) {}
-    }
-    if (existing) {
-      window.GXLibcurl = existing;
-      if (!state.scriptPromise) state.scriptPromise = Promise.resolve(existing);
-    }
-
-    if (!state.scriptPromise) {
-      state.scriptPromise = loadScript(LIBCURL_JS).then(() => {
-        let runtime = window.GXLibcurl || null;
-        if (!runtime) {
-          try {
-            if (typeof libcurl !== "undefined") runtime = libcurl;
-          } catch (_) {}
-        }
-        if (!runtime) throw new Error("libcurl.js loaded but its lexical libcurl binding was not found");
-        window.GXLibcurl = runtime;
-        return runtime;
-      });
-    }
-
-    if (!state.wasmPromise) {
-      state.wasmPromise = state.scriptPromise.then(async runtime => {
-        if (!runtime.ready) await runtime.load_wasm(LIBCURL_WASM);
-        if (!runtime.ready) throw new Error("libcurl.js WASM initialization did not complete");
-        return runtime;
-      }).catch(error => {
-        // Keep the successfully loaded JS promise; retry only WASM initialization.
-        state.wasmPromise = null;
-        throw error;
-      });
-    }
-    return state.wasmPromise;
+    // libcurl_full.js is loaded once by index.html, before this adapter.
+    // libcurl-bridge.js exposes GX's top-level lexical const as window.GXLibcurl.
+    const runtime = window.GXLibcurl;
+    if (!runtime) throw new Error("GX libcurl runtime was not loaded; check libcurl_full.js and libcurl-bridge.js");
+    if (!runtime.ready) await runtime.load_wasm();
+    if (!runtime.ready) throw new Error("GX libcurl WASM initialization did not complete");
+    return runtime;
   }
   function getSession(libcurl, relay) {
     let session = sessions.get(relay);
