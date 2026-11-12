@@ -1,11 +1,7 @@
 (() => {
   "use strict";
 
-  const PROXIES = [
-    { url: "https://api.allorigins.win/get?url=", type: "json" },
-    { url: "https://corsproxy.io/?", type: "raw" },
-    { url: "https://api.codetabs.com/v1/proxy?quest=", type: "raw" }
-  ];
+  // Network transport is provided by GXWisp/libcurl.js.
   
   const HOMEPAGE = "about:home";
   
@@ -82,25 +78,6 @@
     return response;
   }
 
-  async function raceProxies(targetUrl) {
-    const promises = PROXIES.map(async (proxy) => {
-      try {
-        const res = await fetchWithTimeout(proxy.url + encodeURIComponent(targetUrl));
-        if (!res.ok) throw new Error("Status " + res.status);
-        let text = "";
-        if (proxy.type === "json") {
-          const json = await res.json();
-          text = json.contents;
-        } else {
-          text = await res.text();
-        }
-        if (!text || text.length < 50) throw new Error("Empty content");
-        return text; 
-      } catch (e) { throw e; }
-    });
-    return await Promise.any(promises);
-  }
-
   function renderStartPage() {
       const favsHTML = favorites.map(f => `
         <div class="fav-card" onclick="window.navigateActiveTab('${f.url}')">
@@ -146,7 +123,8 @@
     }
 
     try {
-       let content = await raceProxies(url);
+       const response = await GXWisp.fetch(url);
+       let content = await response.text();
        const base = new URL(url).origin;
        if (!content.toLowerCase().includes("<base")) {
          if (content.toLowerCase().includes("<head")) content = content.replace(/<head[^>]*>/i, `$&<base href="${url}">`);
@@ -164,7 +142,7 @@
        finishLoad(tab, title);
 
     } catch (e) {
-       renderError(tab, url, "All connections timed out or were blocked.");
+       renderError(tab, url, "All GX Wisp relays timed out, rejected the connection, or could not fetch this page.");
     }
   }
 
@@ -382,6 +360,12 @@
      if(t.url === "about:home") {
         renderStartPage();
      }
+  };
+
+  const wispSettingsButton = $("#menu-wisp-settings");
+  if (wispSettingsButton) wispSettingsButton.onclick = () => {
+    $("#menu-popup").classList.remove("show");
+    GXWisp.openSettings();
   };
 
   renderBookmarks();
