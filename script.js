@@ -1,11 +1,7 @@
 (() => {
   "use strict";
 
-  const PROXIES = [
-    { url: "https://api.allorigins.win/get?url=", type: "json" },
-    { url: "https://corsproxy.io/?", type: "raw" },
-    { url: "https://api.codetabs.com/v1/proxy?quest=", type: "raw" }
-  ];
+  // Navigation and page requests use the GX Wisp transport.
   
   const HOMEPAGE = "about:home";
   
@@ -82,25 +78,18 @@
     return response;
   }
 
-  async function raceProxies(targetUrl) {
-    const promises = PROXIES.map(async (proxy) => {
-      try {
-        const res = await fetchWithTimeout(proxy.url + encodeURIComponent(targetUrl));
-        if (!res.ok) throw new Error("Status " + res.status);
-        let text = "";
-        if (proxy.type === "json") {
-          const json = await res.json();
-          text = json.contents;
-        } else {
-          text = await res.text();
-        }
-        if (!text || text.length < 50) throw new Error("Empty content");
-        return text; 
-      } catch (e) { throw e; }
-    });
-    return await Promise.any(promises);
+  function injectWispBridge(html) {
+    const bridge = '<script>(function(){try{' +
+      'var pending=new Map(),nextId=0,nativeFetch=window.fetch.bind(window);' +
+      'window.addEventListener("message",function(ev){var d=ev.data;if(!d||d.type!=="wisp:fetch:response")return;var p=pending.get(d.id);if(!p)return;pending.delete(d.id);if(d.error){p.reject(new TypeError(d.error));return;}try{var rb=(d.body&&d.body.byteLength)?new Uint8Array(d.body):null;if(d.status===204||d.status===205||d.status===304)rb=null;p.resolve(new Response(rb,{status:d.status,statusText:d.statusText,headers:d.headers||[]}));}catch(err){p.reject(err);}});' +
+      'window.fetch=async function(input,init){var req=input instanceof Request?input:null;var url=new URL(req?req.url:String(input),document.baseURI);if(url.protocol!=="http:"&&url.protocol!=="https:")return nativeFetch(input,init);var method=(init&&init.method)||(req&&req.method)||"GET";var headers=new Headers(req?req.headers:undefined);if(init&&init.headers)new Headers(init.headers).forEach(function(v,k){headers.set(k,v);});var body=init&&Object.prototype.hasOwnProperty.call(init,"body")?init.body:undefined;if(body===undefined&&req&&method!=="GET"&&method!=="HEAD")body=await req.clone().arrayBuffer();if(body instanceof URLSearchParams){if(!headers.has("content-type"))headers.set("content-type","application/x-www-form-urlencoded;charset=UTF-8");body=body.toString();}if(body instanceof Blob)body=await body.arrayBuffer();var id=++nextId;var opts={method:method,headers:Array.from(headers.entries()),credentials:(init&&init.credentials)||(req&&req.credentials)||"same-origin",redirect:(init&&init.redirect)||(req&&req.redirect)||"follow"};return new Promise(function(resolve,reject){pending.set(id,{resolve:resolve,reject:reject});var msg={type:"wisp:fetch",id:id,url:url.href,options:opts,body:body};try{window.parent.postMessage(msg,"*",body instanceof ArrayBuffer?[body]:[]);}catch(err){pending.delete(id);reject(err);}});};' +
+      'document.addEventListener("click",function(ev){var a=ev.target.closest&&ev.target.closest("a[href]");if(!a||a.hasAttribute("download"))return;var target=a.getAttribute("target");if(target&&target!=="_self")return;var u=new URL(a.href,document.baseURI);if(u.protocol!=="http:"&&u.protocol!=="https:")return;var b=new URL(document.baseURI);if(u.origin===b.origin&&u.pathname===b.pathname&&u.search===b.search)return;ev.preventDefault();window.parent.postMessage({type:"nav",url:u.href},"*");},true);' +
+      'document.addEventListener("submit",function(ev){var f=ev.target;if(!f||String(f.method||"get").toLowerCase()!=="get")return;var u=new URL(f.action||document.baseURI,document.baseURI);var q=new URLSearchParams(new FormData(f));u.search=q.toString();ev.preventDefault();window.parent.postMessage({type:"nav",url:u.href},"*");},true);' +
+      '}catch(e){console.warn("Wisp page bridge:",e);}})();<\/script>';
+    return /<head\b[^>]*>/i.test(html)
+      ? html.replace(/<head\b[^>]*>/i, head => head + bridge)
+      : bridge + html;
   }
-
   function renderStartPage() {
       const favsHTML = favorites.map(f => `
         <div class="fav-card" onclick="window.navigateActiveTab('${f.url}')">
@@ -146,25 +135,27 @@
     }
 
     try {
-       let content = await raceProxies(url);
+       const response = await GXWisp.fetch(url);
+       let content = await response.text();
        const base = new URL(url).origin;
        if (!content.toLowerCase().includes("<base")) {
          if (content.toLowerCase().includes("<head")) content = content.replace(/<head[^>]*>/i, `$&<base href="${url}">`);
          else content = `<base href="${url}">` + content;
        }
 
+       content = injectWispBridge(content);
        const frame = $(`#frame-${tab.id}`);
        frame.removeAttribute("srcdoc");
        frame.srcdoc = content;
        frame.style.background = "#fff";
-       frame.sandbox = "allow-forms allow-scripts allow-popups allow-same-origin allow-modals";
+       frame.sandbox = "allow-forms allow-scripts allow-popups allow-modals";
        
        const m = content.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
        const title = m ? m[1].trim() : new URL(url).hostname;
        finishLoad(tab, title);
 
     } catch (e) {
-       renderError(tab, url, "All connections timed out or were blocked.");
+       renderError(tab, url, "All GX Wisp relays timed out, rejected the connection, or could not fetch this page.");
     }
   }
 
@@ -327,6 +318,26 @@
       }
   };
 
+  window.addEventListener("message", async (e) => {
+    const frame = Array.from(document.querySelectorAll("iframe.web-frame")).find(item => item.contentWindow === e.source);
+    if (!frame || !e.data) return;
+    if (e.data.type === "nav" && typeof e.data.url === "string") {
+      window.navigateActiveTab(e.data.url);
+      return;
+    }
+    if (e.data.type === "wisp:fetch" && typeof e.data.url === "string") {
+      try {
+        const options = { ...(e.data.options || {}) };
+        if (e.data.body !== undefined) options.body = e.data.body;
+        const response = await GXWisp.fetch(e.data.url, options);
+        const body = await response.arrayBuffer();
+        e.source.postMessage({ type: "wisp:fetch:response", id: e.data.id, status: response.status, statusText: response.statusText, headers: Array.from(response.headers.entries()), body }, "*", [body]);
+      } catch (error) {
+        e.source.postMessage({ type: "wisp:fetch:response", id: e.data.id, error: String(error && error.message || error) }, "*");
+      }
+    }
+  });
+
   $("#tab-strip-plus").onclick = $("#toolbar-plus-btn").onclick = $("#menu-new-tab").onclick = () => { 
     $("#menu-popup").classList.remove("show"); 
     createTab(); 
@@ -384,6 +395,11 @@
      }
   };
 
+  const wispSettingsButton = $("#menu-wisp-settings");
+  if (wispSettingsButton) wispSettingsButton.onclick = () => {
+    $("#menu-popup").classList.remove("show");
+    GXWisp.openSettings();
+  };
   renderBookmarks();
   createTab(HOMEPAGE);
 
