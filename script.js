@@ -78,6 +78,23 @@
     return response;
   }
 
+  function injectWispBridge(html) {
+    const bridge = '<script>(function(){try{' +
+      'var routeFetch=async function(input,init){' +
+        'var req=input instanceof Request?input:null;' +
+        'var url=new URL(req?req.url:String(input),document.baseURI).href;' +
+        'var opts=Object.assign({},req?{method:req.method,headers:req.headers,credentials:req.credentials,redirect:req.redirect}: {},init||{});' +
+        'if(req && req.method!=="GET" && req.method!=="HEAD" && !(init && Object.prototype.hasOwnProperty.call(init,"body"))) opts.body=await req.clone().arrayBuffer();' +
+        'return window.parent.GXWisp.fetch(url,opts);' +
+      };' +
+      'window.fetch=routeFetch;' +
+      'document.addEventListener("click",function(ev){var a=ev.target.closest&&ev.target.closest("a[href]");if(!a||a.hasAttribute("download"))return;var target=a.getAttribute("target");if(target&&target!=="_self")return;var u=new URL(a.href,document.baseURI);if(u.protocol!=="http:"&&u.protocol!=="https:")return;var b=new URL(document.baseURI);if(u.origin===b.origin&&u.pathname===b.pathname&&u.search===b.search)return;ev.preventDefault();window.parent.navigateActiveTab(u.href);},true);' +
+      'document.addEventListener("submit",function(ev){var f=ev.target;if(!f||String(f.method||"get").toLowerCase()!=="get")return;var u=new URL(f.action||document.baseURI,document.baseURI);var q=new URLSearchParams(new FormData(f));u.search=q.toString();ev.preventDefault();window.parent.navigateActiveTab(u.href);},true);' +
+      '}catch(e){console.warn("Wisp page bridge:",e);}})();<\\/script>';
+    return /<\\/body\\s*>/i.test(html) ? html.replace(/<\\/body\\s*>/i, bridge + "</body>") : html + bridge;
+  }
+
+
   function renderStartPage() {
       const favsHTML = favorites.map(f => `
         <div class="fav-card" onclick="window.navigateActiveTab('${f.url}')">
@@ -131,6 +148,7 @@
          else content = `<base href="${url}">` + content;
        }
 
+       content = injectWispBridge(content);
        const frame = $(`#frame-${tab.id}`);
        frame.removeAttribute("srcdoc");
        frame.srcdoc = content;
@@ -305,6 +323,11 @@
       }
   };
 
+  window.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "nav" && typeof e.data.url === "string") {
+      window.navigateActiveTab(e.data.url);
+    }
+  });
   $("#tab-strip-plus").onclick = $("#toolbar-plus-btn").onclick = $("#menu-new-tab").onclick = () => { 
     $("#menu-popup").classList.remove("show"); 
     createTab(); 
