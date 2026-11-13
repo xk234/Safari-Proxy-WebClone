@@ -49,7 +49,12 @@
       icon.rel = "icon";
       document.head.appendChild(icon);
     }
-    if (tab.favicon && icon.href !== tab.favicon) icon.href = tab.favicon;
+    const favicon = tab.favicon || getFavicon(tab.url);
+    if (favicon) {
+      if (icon.href !== favicon) icon.href = favicon;
+    } else {
+      icon.removeAttribute("href");
+    }
   }
 
   function normalizeUrl(input) {
@@ -254,6 +259,8 @@
   }
 
   async function navigate(tab, url) {
+    tab.title = url === HOMEPAGE ? "Start Page" : (() => { try { return new URL(url).hostname; } catch (_) { return "Loading"; } })();
+    tab.favicon = "";
     try {
       const parsed = new URL(url);
       if (parsed.hostname === "duckduckgo.com" || parsed.hostname === "www.duckduckgo.com") {
