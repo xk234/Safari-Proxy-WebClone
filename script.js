@@ -104,7 +104,14 @@
  addEventListener("unhandledrejection",function(e){send("inspector:console",{level:"error",args:"Unhandled rejection: "+String(e.reason),time:Date.now()});});
  try{new PerformanceObserver(function(list){list.getEntries().forEach(function(e){send("inspector:resource",{name:e.name,type:e.initiatorType||"resource",duration:Math.round(e.duration),size:e.transferSize||0});});}).observe({type:"resource",buffered:true});}catch(e){}
  addEventListener("message",function(e){var d=e.data;if(!d||d.type!=="inspector:command")return;var a=d.data||{},el;try{if(a.action==="snapshot")snapshot();else if(a.action==="inspect-mode"){inspectMode=!!a.enabled;document.documentElement.style.cursor=inspectMode?"crosshair":"";}else if(a.action==="highlight"){el=(function(p){var n=document.documentElement;(p||[]).forEach(function(i){n=n&&n.children[i];});return n;})(a.path);if(el){el.scrollIntoView({block:"center"});el.style.outline="2px solid #0a84ff";setTimeout(function(){el.style.outline="";},1000);}}else if(a.action==="select-by-id"){el=byId[a.id];if(el)selected(el);}else if(a.action==="set-style"){el=document.documentElement;(a.path||[]).forEach(function(i){el=el&&el.children[i];});if(el)el.style.setProperty(a.name,a.value);changed();}else if(a.action==="set-attr"){el=document.documentElement;(a.path||[]).forEach(function(i){el=el&&el.children[i];});if(el)el.setAttribute(a.name,a.value);changed();}else if(a.action==="remove"){el=document.documentElement;(a.path||[]).forEach(function(i){el=el&&el.children[i];});if(el&&el!==document.documentElement)el.remove();changed();}}catch(err){send("inspector:error",{message:String(err)});}});
- send("inspector:ready",{url:location.href});setTimeout(snapshot,250);
+ function reportExtras(){
+  try{var items=[];Array.prototype.slice.call(document.scripts||[]).forEach(function(x,i){items.push({kind:"script",url:x.src||"",name:"inline script "+(i+1),preview:x.src?"":(x.textContent||"").slice(0,500)});});
+  Array.prototype.slice.call(document.querySelectorAll("link[rel~='stylesheet'],style")).forEach(function(x,i){items.push({kind:"stylesheet",url:x.href||"",name:"inline style "+(i+1),preview:x.tagName==="STYLE"?(x.textContent||"").slice(0,350):""});});send("inspector:sources",{items:items});}catch(e){}
+  var storage={localStorage:{},sessionStorage:{},cookies:""};try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);storage.localStorage[k]=localStorage.getItem(k);}}catch(e){storage.localStorageUnavailable=String(e);}
+  try{for(var j=0;j<sessionStorage.length;j++){var sk=sessionStorage.key(j);storage.sessionStorage[sk]=sessionStorage.getItem(sk);}}catch(e){storage.sessionStorageUnavailable=String(e);}
+  try{storage.cookies=document.cookie;}catch(e){storage.cookiesUnavailable=String(e);}send("inspector:storage",storage);
+ }
+ send("inspector:ready",{url:location.href});setTimeout(function(){snapshot();reportExtras();},250);
 })();
 <\/script>`;
     return /<head\b[^>]*>/i.test(html)
@@ -352,8 +359,10 @@
         if (e.data.body !== undefined) options.body = e.data.body;
         const response = await GXWisp.fetch(e.data.url, options);
         const body = await response.arrayBuffer();
+        window.dispatchEvent(new CustomEvent("safari:wisp-response", { detail: { id: e.data.id, url: e.data.url, status: response.status } }));
         e.source.postMessage({ type: "wisp:fetch:response", id: e.data.id, status: response.status, statusText: response.statusText, headers: Array.from(response.headers.entries()), body }, "*", [body]);
       } catch (error) {
+        window.dispatchEvent(new CustomEvent("safari:wisp-response", { detail: { id: e.data.id, url: e.data.url, status: "failed" } }));
         e.source.postMessage({ type: "wisp:fetch:response", id: e.data.id, error: String(error && error.message || error) }, "*");
       }
     }
