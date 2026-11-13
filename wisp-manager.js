@@ -6,6 +6,7 @@
 (() => {
   "use strict";
   const DEFAULTS = [
+  "wss://wisp.terbiumon.top/wisp/",
   "wss://wisp.rhw.one/wisp/",
   "wss://definitelyscience.com/wisp/",
   "wss://mages.io/wisp/",
@@ -54,7 +55,7 @@
   function rankPoolCandidates(host) {
     const health = readHealth();
     const now = Date.now();
-    const preferred = storage.get(STORE.preferred);
+    const preferred = storage.get(STORE.preferred) || DEFAULTS[0];
     const fastest = storage.get(STORE.fastest);
     return getWispPool().map((url, index) => {
       const item = health[url] && health[url][host] || {};
