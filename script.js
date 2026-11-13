@@ -193,7 +193,7 @@
   async function rewriteStaticAssets(html, pageUrl) {
     const doc = new DOMParser().parseFromString(html, "text/html");
     doc.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]').forEach(node => node.remove());
-    const nodes = [...doc.querySelectorAll("script[src],link[href],img[src],source[src],video[poster]")];
+    const nodes = [...doc.querySelectorAll("script[src],link[rel~='stylesheet'][href],link[rel~='preload'][href],link[rel~='icon'][href],img[src],source[src],video[poster]")];
     for (const node of nodes) {
       const attr = node.hasAttribute("poster") ? "poster" : node.hasAttribute("src") ? "src" : "href";
       const raw = node.getAttribute(attr);
