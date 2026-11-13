@@ -85,7 +85,7 @@
       'window.fetch=async function(input,init){var req=input instanceof Request?input:null;var url=new URL(req?req.url:String(input),document.baseURI);if(url.protocol!=="http:"&&url.protocol!=="https:")return nativeFetch(input,init);var method=(init&&init.method)||(req&&req.method)||"GET";var headers=new Headers(req?req.headers:undefined);if(init&&init.headers)new Headers(init.headers).forEach(function(v,k){headers.set(k,v);});var body=init&&Object.prototype.hasOwnProperty.call(init,"body")?init.body:undefined;if(body===undefined&&req&&method!=="GET"&&method!=="HEAD")body=await req.clone().arrayBuffer();if(body instanceof URLSearchParams){if(!headers.has("content-type"))headers.set("content-type","application/x-www-form-urlencoded;charset=UTF-8");body=body.toString();}if(body instanceof Blob)body=await body.arrayBuffer();var id=++nextId;var opts={method:method,headers:Array.from(headers.entries()),credentials:(init&&init.credentials)||(req&&req.credentials)||"same-origin",redirect:(init&&init.redirect)||(req&&req.redirect)||"follow"};return new Promise(function(resolve,reject){pending.set(id,{resolve:resolve,reject:reject});var msg={type:"wisp:fetch",id:id,url:url.href,options:opts,body:body};try{window.parent.postMessage(msg,"*",body instanceof ArrayBuffer?[body]:[]);}catch(err){pending.delete(id);reject(err);}});};' +
       'document.addEventListener("click",function(ev){var a=ev.target.closest&&ev.target.closest("a[href]");if(!a||a.hasAttribute("download"))return;var target=a.getAttribute("target");if(target&&target!=="_self")return;var u=new URL(a.href,document.baseURI);if(u.protocol!=="http:"&&u.protocol!=="https:")return;var b=new URL(document.baseURI);if(u.origin===b.origin&&u.pathname===b.pathname&&u.search===b.search)return;ev.preventDefault();window.parent.postMessage({type:"nav",url:u.href},"*");},true);' +
       'document.addEventListener("submit",function(ev){var f=ev.target;if(!f||String(f.method||"get").toLowerCase()!=="get")return;var u=new URL(f.action||document.baseURI,document.baseURI);var q=new URLSearchParams(new FormData(f));u.search=q.toString();ev.preventDefault();window.parent.postMessage({type:"nav",url:u.href},"*");},true);' +
-      '}catch(e){console.warn("Wisp page bridge:",e);}})();<\/script>';
+      '}catch(e){console.warn("Wisp page bridge:",e);}})();</script>';
     const inspector = `<script>
 (function(){
  if(window.__safariInspectorInstalled)return;window.__safariInspectorInstalled=true;
@@ -113,7 +113,7 @@
  }
  send("inspector:ready",{url:location.href});setTimeout(function(){snapshot();reportExtras();},250);
 })();
-<\/script>`;
+</script>`;
     return /<head\b[^>]*>/i.test(html)
       ? html.replace(/<head\b[^>]*>/i, head => head + bridge + inspector)
       : bridge + inspector + html;
