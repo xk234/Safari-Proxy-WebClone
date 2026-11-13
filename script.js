@@ -156,20 +156,20 @@
 
   async function rewriteCssAssets(css, cssUrl, depth = 0) {
     if (depth > 2) return css;
-    const matches = [...css.matchAll(/url\\(\\s*(['"]?)(.*?)\\1\\s*\\)/gi)];
+    const matches = [...css.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/gi)];
     for (const match of matches) {
       const raw = match[2].trim();
       if (!raw || /^(data:|blob:|#)/i.test(raw)) continue;
       let assetUrl;
       try { assetUrl = new URL(raw, cssUrl).href; } catch (_) { continue; }
-      if (!/^https?:\\/\\//i.test(assetUrl)) continue;
+      if (!/^https?:\/\//i.test(assetUrl)) continue;
       try {
         const response = await GXWisp.fetch(assetUrl);
         if (!response.ok) continue;
         const bytes = await response.arrayBuffer();
         if (bytes.byteLength > 8 * 1024 * 1024) continue;
         let dataUrl = bytesToDataUrl(bytes, response.headers.get("content-type") || "application/octet-stream");
-        if (/\\.css(?:[?#]|$)/i.test(assetUrl) || /text\\/css/i.test(response.headers.get("content-type") || "")) {
+        if (/\.css(?:[?#]|$)/i.test(assetUrl) || /text\/css/i.test(response.headers.get("content-type") || "")) {
           const nested = await rewriteCssAssets(new TextDecoder().decode(bytes), assetUrl, depth + 1);
           dataUrl = "data:text/css;base64," + btoa(unescape(encodeURIComponent(nested)));
         }
@@ -191,7 +191,7 @@
       if (!raw || /^(data:|blob:|javascript:|#)/i.test(raw)) continue;
       let assetUrl;
       try { assetUrl = new URL(raw, pageUrl).href; } catch (_) { continue; }
-      if (!/^https?:\\/\\//i.test(assetUrl)) continue;
+      if (!/^https?:\/\//i.test(assetUrl)) continue;
       // Module scripts can contain relative imports, so leave them to the page's fetch bridge.
       if (node.tagName === "SCRIPT" && node.type === "module") continue;
       try {
