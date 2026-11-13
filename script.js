@@ -4,6 +4,15 @@
   // Navigation and page requests use the GX Wisp transport.
   
   const HOMEPAGE = "about:home";
+  const endpointParams = new URLSearchParams(window.location.search);
+  const endpointTarget = endpointParams.has("p") ? normalizeEndpointTarget(endpointParams.get("p")) : "";
+  const pageOnlyMode = endpointParams.get("f") === "1";
+
+  function normalizeEndpointTarget(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    return normalizeUrl(raw);
+  }
   
   const DEFAULTS = {
     favorites: [
@@ -27,6 +36,20 @@
     const fav = favorites.find(f => f.url === url);
     if (fav && fav.icon) return fav.icon;
     try { return `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=32`; } catch { return ""; }
+  }
+
+  function syncTopSite(tab) {
+    if (!tab || tab.id !== activeTabId) return;
+    const title = tab.title || (() => { try { return new URL(tab.url).hostname; } catch (_) { return "Safari"; } })();
+    if (document.title !== title) document.title = title;
+    let icon = document.querySelector('link#active-page-favicon');
+    if (!icon) {
+      icon = document.createElement("link");
+      icon.id = "active-page-favicon";
+      icon.rel = "icon";
+      document.head.appendChild(icon);
+    }
+    if (tab.favicon && icon.href !== tab.favicon) icon.href = tab.favicon;
   }
 
   function normalizeUrl(input) {
@@ -103,7 +126,7 @@
  function pathFor(el){var p=[],n=el;while(n&&n.nodeType===1&&n!==document.documentElement){var par=n.parentElement;if(!par)break;p.unshift(Array.prototype.indexOf.call(par.children,n));n=par;}return p;}
  function send(type,data){try{parent.postMessage({type:type,data:data||{}},"*");}catch(e){}}
  function describe(n,depth){if(!n||n.nodeType!==1)return null;var a={};Array.prototype.slice.call(n.attributes||[]).slice(0,40).forEach(function(x){a[x.name]=x.value;});var o={id:idFor(n),tag:n.tagName.toLowerCase(),attrs:a,text:n.children.length?"":(n.textContent||"").trim().slice(0,150),path:pathFor(n),children:[]};if(depth>0)Array.prototype.slice.call(n.children||[]).slice(0,70).forEach(function(c){var x=describe(c,depth-1);if(x)o.children.push(x);});return o;}
- function snapshot(){try{send("inspector:dom",{tree:describe(document.documentElement,8),url:location.href,title:document.title});}catch(e){send("inspector:error",{message:String(e)});}}
+ function snapshot(){try{var icon=document.querySelector('link[rel~="icon"],link[rel="shortcut icon"]');send("inspector:dom",{tree:describe(document.documentElement,8),url:location.href,title:document.title,favicon:icon?(icon.href||icon.getAttribute("href")||""):""});}catch(e){send("inspector:error",{message:String(e)});}}
  var timer;function changed(){clearTimeout(timer);timer=setTimeout(snapshot,200);}
  try{new MutationObserver(changed).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});}catch(e){}
  function selected(el){var s=getComputedStyle(el),styles={};["display","position","width","height","margin","padding","color","backgroundColor","fontSize","fontFamily","border","opacity","zIndex","overflow"].forEach(function(k){styles[k]=s[k];});var attrs={};Array.prototype.slice.call(el.attributes||[]).forEach(function(a){attrs[a.name]=a.value;});send("inspector:selected",{id:idFor(el),tag:el.tagName.toLowerCase(),attrs:attrs,text:(el.textContent||"").trim().slice(0,300),path:pathFor(el),styles:styles,html:el.outerHTML.slice(0,3500)});}
@@ -328,7 +351,7 @@
     iframe.id = "frame-" + id;
     $("#web-content").appendChild(iframe);
 
-    const tab = { id, url, title: "Start Page", loading: false, historyStack: [], historyIdx: -1 };
+    const tab = { id, url, title: "Start Page", favicon: "", loading: false, historyStack: [], historyIdx: -1 };
     tabs.push(tab);
     activateTab(id);
     
@@ -369,7 +392,7 @@
       const el = document.createElement("div");
       el.className = `tab ${t.id === activeTabId ? 'active' : ''} ${t.loading ? 'loading' : ''}`;
       
-      let favSrc = getFavicon(t.url);
+      let favSrc = t.favicon || getFavicon(t.url);
       if(t.url === "about:home") favSrc = ""; 
 
       const imgHtml = favSrc ? `<img class="tab-favicon" src="${favSrc}">` : '';
@@ -385,6 +408,8 @@
       el.onclick = (e) => { if(!e.target.classList.contains("tab-close")) activateTab(t.id); };
       container.appendChild(el);
     });
+
+    syncTopSite(tabs.find(x => x.id === activeTabId));
 
     // 2. Manage Content Visibility (Overlay vs Iframe)
     const t = tabs.find(x => x.id === activeTabId);
@@ -445,6 +470,19 @@
   window.addEventListener("message", async (e) => {
     const frame = Array.from(document.querySelectorAll("iframe.web-frame")).find(item => item.contentWindow === e.source);
     if (!frame || !e.data) return;
+    if (e.data.type === "inspector:dom" && e.data.data) {
+      const tab = tabs.find(item => item.id === frame.id.replace("frame-", ""));
+      if (tab) {
+        const nextTitle = String(e.data.data.title || "").trim() || (() => { try { return new URL(tab.url).hostname; } catch (_) { return tab.title; } })();
+        const nextFavicon = typeof e.data.data.favicon === "string" ? e.data.data.favicon : "";
+        const changed = tab.title !== nextTitle || tab.favicon !== nextFavicon;
+        tab.title = nextTitle;
+        tab.favicon = nextFavicon;
+        if (tab.id === activeTabId) syncTopSite(tab);
+        if (changed) updateUI();
+      }
+      return;
+    }
     if (e.data.type === "nav" && typeof e.data.url === "string") {
       window.navigateActiveTab(e.data.url);
       return;
@@ -527,7 +565,8 @@
     GXWisp.openSettings();
   };
   renderBookmarks();
-  createTab(HOMEPAGE);
+  if (pageOnlyMode) document.body.classList.add("page-only");
+  createTab(endpointTarget || HOMEPAGE);
 
 })();
 /* =========================================================================
