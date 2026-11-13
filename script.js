@@ -193,7 +193,7 @@
   async function rewriteStaticAssets(html, pageUrl) {
     const doc = new DOMParser().parseFromString(html, "text/html");
     doc.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]').forEach(node => node.remove());
-    const nodes = [...doc.querySelectorAll("script[src],link[rel~='stylesheet'][href],img[src],source[src],video[poster]")];
+    const nodes = [...doc.querySelectorAll("script[src],link[href],img[src],source[src],video[poster]")];
     for (const node of nodes) {
       const attr = node.hasAttribute("poster") ? "poster" : node.hasAttribute("src") ? "src" : "href";
       const raw = node.getAttribute(attr);
@@ -221,10 +221,23 @@
         console.warn("GX Wisp page asset failed:", assetUrl, error);
       }
     }
+    for (const style of doc.querySelectorAll("style")) {
+      style.textContent = await rewriteCssAssets(style.textContent || "", pageUrl);
+    }
+    for (const node of doc.querySelectorAll("[style]")) {
+      node.setAttribute("style", await rewriteCssAssets(node.getAttribute("style") || "", pageUrl));
+    }
     return "<!doctype html>\n" + doc.documentElement.outerHTML;
   }
 
   async function navigate(tab, url) {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname === "duckduckgo.com" || parsed.hostname === "www.duckduckgo.com") {
+        if (!parsed.pathname) parsed.pathname = "/";
+        url = parsed.href;
+      }
+    } catch (_) {}
     tab.loading = true;
     tab.url = url;
     updateUI();
