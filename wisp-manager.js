@@ -15,7 +15,6 @@
   "wss://area.forwardersoft.com/wisp/",
   "wss://truf.the-nest.at/wisp/",
   "wss://thoughts.forwardersoft.com/wisp/",
-  "wss://wisp.terbiumon.top/wisp/",
   "wss://anura.pro/",
   "wss://wisp.mercurywork.shop/",
   "wss://nebulaproxy.io/wisp/",
