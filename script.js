@@ -143,6 +143,78 @@
         </div>`;
   }
 
+  // Convert static page assets into data URLs fetched through GX Wisp.
+  // This avoids browser CORS failures for resources embedded in srcdoc pages.
+  function bytesToDataUrl(bytes, mime) {
+    const data = new Uint8Array(bytes);
+    let binary = "";
+    for (let i = 0; i < data.length; i += 0x8000) {
+      binary += String.fromCharCode.apply(null, data.subarray(i, Math.min(i + 0x8000, data.length)));
+    }
+    return "data:" + (mime || "application/octet-stream") + ";base64," + btoa(binary);
+  }
+
+  async function rewriteCssAssets(css, cssUrl, depth = 0) {
+    if (depth > 2) return css;
+    const matches = [...css.matchAll(/url\\(\\s*(['"]?)(.*?)\\1\\s*\\)/gi)];
+    for (const match of matches) {
+      const raw = match[2].trim();
+      if (!raw || /^(data:|blob:|#)/i.test(raw)) continue;
+      let assetUrl;
+      try { assetUrl = new URL(raw, cssUrl).href; } catch (_) { continue; }
+      if (!/^https?:\\/\\//i.test(assetUrl)) continue;
+      try {
+        const response = await GXWisp.fetch(assetUrl);
+        if (!response.ok) continue;
+        const bytes = await response.arrayBuffer();
+        if (bytes.byteLength > 8 * 1024 * 1024) continue;
+        let dataUrl = bytesToDataUrl(bytes, response.headers.get("content-type") || "application/octet-stream");
+        if (/\\.css(?:[?#]|$)/i.test(assetUrl) || /text\\/css/i.test(response.headers.get("content-type") || "")) {
+          const nested = await rewriteCssAssets(new TextDecoder().decode(bytes), assetUrl, depth + 1);
+          dataUrl = "data:text/css;base64," + btoa(unescape(encodeURIComponent(nested)));
+        }
+        css = css.replace(match[0], "url('" + dataUrl + "')");
+      } catch (error) {
+        console.warn("GX Wisp CSS asset failed:", assetUrl, error);
+      }
+    }
+    return css;
+  }
+
+  async function rewriteStaticAssets(html, pageUrl) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    doc.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]').forEach(node => node.remove());
+    const nodes = [...doc.querySelectorAll("script[src],link[rel~='stylesheet'][href],img[src],source[src],video[poster]")];
+    for (const node of nodes) {
+      const attr = node.hasAttribute("poster") ? "poster" : node.hasAttribute("src") ? "src" : "href";
+      const raw = node.getAttribute(attr);
+      if (!raw || /^(data:|blob:|javascript:|#)/i.test(raw)) continue;
+      let assetUrl;
+      try { assetUrl = new URL(raw, pageUrl).href; } catch (_) { continue; }
+      if (!/^https?:\\/\\//i.test(assetUrl)) continue;
+      // Module scripts can contain relative imports, so leave them to the page's fetch bridge.
+      if (node.tagName === "SCRIPT" && node.type === "module") continue;
+      try {
+        const response = await GXWisp.fetch(assetUrl);
+        if (!response.ok) continue;
+        const bytes = await response.arrayBuffer();
+        if (bytes.byteLength > 8 * 1024 * 1024) continue;
+        const mime = response.headers.get("content-type") || (node.tagName === "SCRIPT" ? "text/javascript" : "application/octet-stream");
+        let dataUrl;
+        if (node.tagName === "LINK" && /css/i.test(node.rel)) {
+          const css = await rewriteCssAssets(new TextDecoder().decode(bytes), assetUrl);
+          dataUrl = "data:text/css;base64," + btoa(unescape(encodeURIComponent(css)));
+        } else {
+          dataUrl = bytesToDataUrl(bytes, mime);
+        }
+        node.setAttribute(attr, dataUrl);
+      } catch (error) {
+        console.warn("GX Wisp page asset failed:", assetUrl, error);
+      }
+    }
+    return "<!doctype html>\\n" + doc.documentElement.outerHTML;
+  }
+
   async function navigate(tab, url) {
     tab.loading = true;
     tab.url = url;
@@ -164,7 +236,9 @@
 
     try {
        const response = await GXWisp.fetch(url);
+       if (!response.ok) throw new Error("Upstream returned HTTP " + response.status);
        let content = await response.text();
+       content = await rewriteStaticAssets(content, url);
        const base = new URL(url).origin;
        if (!content.toLowerCase().includes("<base")) {
          if (content.toLowerCase().includes("<head")) content = content.replace(/<head[^>]*>/i, `$&<base href="${url}">`);
