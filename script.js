@@ -34,7 +34,16 @@
     if (!s) return "about:blank";
     if (s === "about:home") return s;
     if (s.startsWith("data:")) return s;
-    if (/^https?:\/\//i.test(s)) return s;
+    if (/^https?:\/\//i.test(s)) {
+      try {
+        const parsed = new URL(s);
+        if (parsed.hostname === "duckduckgo.com" || parsed.hostname === "www.duckduckgo.com") {
+          if (!parsed.pathname) parsed.pathname = "/";
+          return parsed.href;
+        }
+      } catch (_) {}
+      return s;
+    }
     if (s.includes(".") && !s.includes(" ")) return "https://" + s;
     return `https://www.bing.com/search?q=${encodeURIComponent(s)}`;
   }
@@ -212,7 +221,7 @@
         console.warn("GX Wisp page asset failed:", assetUrl, error);
       }
     }
-    return "<!doctype html>\\n" + doc.documentElement.outerHTML;
+    return "<!doctype html>\n" + doc.documentElement.outerHTML;
   }
 
   async function navigate(tab, url) {
