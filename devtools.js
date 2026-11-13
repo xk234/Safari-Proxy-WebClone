@@ -41,6 +41,6 @@ window.addEventListener("safari:wisp-response",e=>{const d=e.detail||{};const p=
 $("#si-close").onclick=close;$("#si-clear").onclick=()=>{S.console=[];consoleRender();};$("#si-net-clear").onclick=()=>{S.network=[];networkRender();};
 $("#si-picker").onclick=()=>{S.inspect=!S.inspect;cmd("inspect-mode",{enabled:S.inspect});$("#si-picker").classList.toggle("active",S.inspect);$("#si-status").textContent=S.inspect?"Click an element in the page":"Element picker off";};
 $("#menu-inspect").onclick=()=>{$("#menu-popup").classList.remove("show");open();};
-document.addEventListener("keydown",e=>{if((e.altKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==="i"){e.preventDefault();S.open?close():open();}});
+document.addEventListener("keydown",e=>{if(((e.altKey&&e.metaKey)||(e.ctrlKey&&e.shiftKey))&&e.key.toLowerCase()==="i"){e.preventDefault();S.open?close():open();}});
 window.SafariWebInspector={open,close,refresh:()=>cmd("snapshot")};
 })();
