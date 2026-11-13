@@ -5,8 +5,6 @@
  */
 (() => {
   "use strict";
-  const LIBCURL_JS = "https://cdn.jsdelivr.net/npm/libcurl.js@0.7.4/libcurl.js";
-  const LIBCURL_WASM = "https://cdn.jsdelivr.net/npm/libcurl.js@0.7.4/libcurl.wasm";
   const DEFAULTS = [
   "wss://wisp.rhw.one/wisp/",
   "wss://definitelyscience.com/wisp/",
@@ -31,7 +29,7 @@
   };
   const COOLDOWN_MS = 5 * 60 * 1000;
   const TIMEOUT_MS = 9000;
-  let runtimePromise = null;
+  const RUNTIME_STATE_KEY = "__GX_LIBCURL_RUNTIME_V1__";
   let activeRelay = "";
   let requestQueue = Promise.resolve();
   const sessions = new Map();
@@ -77,25 +75,14 @@
     writeHealth(health);
     if (ok) storage.set(STORE.fastest, url);
   }
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = src;
-      script.async = true;
-      script.onload = resolve;
-      script.onerror = () => reject(new Error("Could not load libcurl.js from " + src));
-      document.head.appendChild(script);
-    });
-  }
   async function ensureRuntime() {
-    if (window.libcurl && window.libcurl.ready) return window.libcurl;
-    if (!runtimePromise) runtimePromise = (async () => {
-      if (!window.libcurl) await loadScript(LIBCURL_JS);
-      if (!window.libcurl) throw new Error("libcurl.js did not expose window.libcurl");
-      await window.libcurl.load_wasm(LIBCURL_WASM);
-      return window.libcurl;
-    })().catch(error => { runtimePromise = null; throw error; });
-    return runtimePromise;
+    // libcurl_full.js is loaded once by index.html, before this adapter.
+    // libcurl-bridge.js exposes GX's top-level lexical const as window.GXLibcurl.
+    const runtime = window.GXLibcurl;
+    if (!runtime) throw new Error("GX libcurl runtime was not loaded; check libcurl_full.js and libcurl-bridge.js");
+    if (!runtime.ready) await runtime.load_wasm();
+    if (!runtime.ready) throw new Error("GX libcurl WASM initialization did not complete");
+    return runtime;
   }
   function getSession(libcurl, relay) {
     let session = sessions.get(relay);

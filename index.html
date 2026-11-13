@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>Safari (Final - Fixed Backgrounds)</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="devtools.css">
 </head>
 <body class="">
 
@@ -77,6 +78,7 @@
       <div class="menu-item" id="menu-new-tab">New Tab <span style="margin-left:auto;opacity:0.5">⌘T</span></div>
       <div class="menu-item" style="opacity:0.5">New Window <span style="margin-left:auto;opacity:0.5">⌘N</span></div>
       <div class="menu-sep"></div>
+      <div class="menu-item" id="menu-inspect">Show Web Inspector <span style="margin-left:auto;opacity:.5">⌥⌘I</span></div>
       <div class="menu-item" id="menu-wisp-settings">Wisp Relay Settings</div>
       <div class="menu-sep"></div>
       <div class="menu-item" id="menu-theme-toggle">Switch to Light Mode</div>
@@ -88,7 +90,10 @@
   <div id="web-content"></div>
   <div id="status-bar">Ready</div>
 
-  <script src="wisp-manager.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/libcurl.js@0.7.4/libcurl_full.js"></script>
+    <script src="libcurl-bridge.js"></script>
+    <script src="wisp-manager.js"></script>
   <script src="script.js"></script>
+  <script src="devtools.js"></script>
 </body>
 </html>
