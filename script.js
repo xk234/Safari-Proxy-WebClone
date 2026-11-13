@@ -4,6 +4,15 @@
   // Navigation and page requests use the GX Wisp transport.
   
   const HOMEPAGE = "about:home";
+  const endpointParams = new URLSearchParams(window.location.search);
+  const endpointTarget = endpointParams.has("p") ? normalizeEndpointTarget(endpointParams.get("p")) : "";
+  const pageOnlyMode = endpointParams.get("f") === "1";
+
+  function normalizeEndpointTarget(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    return normalizeUrl(raw);
+  }
   
   const DEFAULTS = {
     favorites: [
@@ -29,12 +38,40 @@
     try { return `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=32`; } catch { return ""; }
   }
 
+  function syncTopSite(tab) {
+    if (!tab || tab.id !== activeTabId) return;
+    const title = tab.title || (() => { try { return new URL(tab.url).hostname; } catch (_) { return "Safari"; } })();
+    if (document.title !== title) document.title = title;
+    let icon = document.querySelector('link#active-page-favicon');
+    if (!icon) {
+      icon = document.createElement("link");
+      icon.id = "active-page-favicon";
+      icon.rel = "icon";
+      document.head.appendChild(icon);
+    }
+    const favicon = tab.favicon || getFavicon(tab.url);
+    if (favicon) {
+      if (icon.href !== favicon) icon.href = favicon;
+    } else {
+      icon.removeAttribute("href");
+    }
+  }
+
   function normalizeUrl(input) {
     let s = String(input || "").trim();
     if (!s) return "about:blank";
     if (s === "about:home") return s;
     if (s.startsWith("data:")) return s;
-    if (/^https?:\/\//i.test(s)) return s;
+    if (/^https?:\/\//i.test(s)) {
+      try {
+        const parsed = new URL(s);
+        if (parsed.hostname === "duckduckgo.com" || parsed.hostname === "www.duckduckgo.com") {
+          if (!parsed.pathname) parsed.pathname = "/";
+          return parsed.href;
+        }
+      } catch (_) {}
+      return s;
+    }
     if (s.includes(".") && !s.includes(" ")) return "https://" + s;
     return `https://www.bing.com/search?q=${encodeURIComponent(s)}`;
   }
@@ -94,7 +131,7 @@
  function pathFor(el){var p=[],n=el;while(n&&n.nodeType===1&&n!==document.documentElement){var par=n.parentElement;if(!par)break;p.unshift(Array.prototype.indexOf.call(par.children,n));n=par;}return p;}
  function send(type,data){try{parent.postMessage({type:type,data:data||{}},"*");}catch(e){}}
  function describe(n,depth){if(!n||n.nodeType!==1)return null;var a={};Array.prototype.slice.call(n.attributes||[]).slice(0,40).forEach(function(x){a[x.name]=x.value;});var o={id:idFor(n),tag:n.tagName.toLowerCase(),attrs:a,text:n.children.length?"":(n.textContent||"").trim().slice(0,150),path:pathFor(n),children:[]};if(depth>0)Array.prototype.slice.call(n.children||[]).slice(0,70).forEach(function(c){var x=describe(c,depth-1);if(x)o.children.push(x);});return o;}
- function snapshot(){try{send("inspector:dom",{tree:describe(document.documentElement,8),url:location.href,title:document.title});}catch(e){send("inspector:error",{message:String(e)});}}
+ function snapshot(){try{var icon=document.querySelector('link[rel~="icon"],link[rel="shortcut icon"]');send("inspector:dom",{tree:describe(document.documentElement,8),url:location.href,title:document.title,favicon:icon?(icon.href||icon.getAttribute("href")||""):""});}catch(e){send("inspector:error",{message:String(e)});}}
  var timer;function changed(){clearTimeout(timer);timer=setTimeout(snapshot,200);}
  try{new MutationObserver(changed).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});}catch(e){}
  function selected(el){var s=getComputedStyle(el),styles={};["display","position","width","height","margin","padding","color","backgroundColor","fontSize","fontFamily","border","opacity","zIndex","overflow"].forEach(function(k){styles[k]=s[k];});var attrs={};Array.prototype.slice.call(el.attributes||[]).forEach(function(a){attrs[a.name]=a.value;});send("inspector:selected",{id:idFor(el),tag:el.tagName.toLowerCase(),attrs:attrs,text:(el.textContent||"").trim().slice(0,300),path:pathFor(el),styles:styles,html:el.outerHTML.slice(0,3500)});}
@@ -143,7 +180,94 @@
         </div>`;
   }
 
+  // Convert static page assets into data URLs fetched through GX Wisp.
+  // This avoids browser CORS failures for resources embedded in srcdoc pages.
+  function bytesToDataUrl(bytes, mime) {
+    const data = new Uint8Array(bytes);
+    let binary = "";
+    for (let i = 0; i < data.length; i += 0x8000) {
+      binary += String.fromCharCode.apply(null, data.subarray(i, Math.min(i + 0x8000, data.length)));
+    }
+    return "data:" + (mime || "application/octet-stream") + ";base64," + btoa(binary);
+  }
+
+  async function rewriteCssAssets(css, cssUrl, depth = 0) {
+    if (depth > 2) return css;
+    const matches = [...css.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/gi)];
+    for (const match of matches) {
+      const raw = match[2].trim();
+      if (!raw || /^(data:|blob:|#)/i.test(raw)) continue;
+      let assetUrl;
+      try { assetUrl = new URL(raw, cssUrl).href; } catch (_) { continue; }
+      if (!/^https?:\/\//i.test(assetUrl)) continue;
+      try {
+        const response = await GXWisp.fetch(assetUrl);
+        if (!response.ok) continue;
+        const bytes = await response.arrayBuffer();
+        if (bytes.byteLength > 8 * 1024 * 1024) continue;
+        let dataUrl = bytesToDataUrl(bytes, response.headers.get("content-type") || "application/octet-stream");
+        if (/\.css(?:[?#]|$)/i.test(assetUrl) || /text\/css/i.test(response.headers.get("content-type") || "")) {
+          const nested = await rewriteCssAssets(new TextDecoder().decode(bytes), assetUrl, depth + 1);
+          dataUrl = "data:text/css;base64," + btoa(unescape(encodeURIComponent(nested)));
+        }
+        css = css.replace(match[0], "url('" + dataUrl + "')");
+      } catch (error) {
+        console.warn("GX Wisp CSS asset failed:", assetUrl, error);
+      }
+    }
+    return css;
+  }
+
+  async function rewriteStaticAssets(html, pageUrl) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    doc.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]').forEach(node => node.remove());
+    const nodes = [...doc.querySelectorAll("script[src],link[rel~='stylesheet'][href],link[rel~='preload'][href],link[rel~='icon'][href],img[src],source[src],video[poster]")];
+    for (const node of nodes) {
+      const attr = node.hasAttribute("poster") ? "poster" : node.hasAttribute("src") ? "src" : "href";
+      const raw = node.getAttribute(attr);
+      if (!raw || /^(data:|blob:|javascript:|#)/i.test(raw)) continue;
+      let assetUrl;
+      try { assetUrl = new URL(raw, pageUrl).href; } catch (_) { continue; }
+      if (!/^https?:\/\//i.test(assetUrl)) continue;
+      // Module scripts can contain relative imports, so leave them to the page's fetch bridge.
+      if (node.tagName === "SCRIPT" && node.type === "module") continue;
+      try {
+        const response = await GXWisp.fetch(assetUrl);
+        if (!response.ok) continue;
+        const bytes = await response.arrayBuffer();
+        if (bytes.byteLength > 8 * 1024 * 1024) continue;
+        const mime = response.headers.get("content-type") || (node.tagName === "SCRIPT" ? "text/javascript" : "application/octet-stream");
+        let dataUrl;
+        if (node.tagName === "LINK" && /css/i.test(node.rel)) {
+          const css = await rewriteCssAssets(new TextDecoder().decode(bytes), assetUrl);
+          dataUrl = "data:text/css;base64," + btoa(unescape(encodeURIComponent(css)));
+        } else {
+          dataUrl = bytesToDataUrl(bytes, mime);
+        }
+        node.setAttribute(attr, dataUrl);
+      } catch (error) {
+        console.warn("GX Wisp page asset failed:", assetUrl, error);
+      }
+    }
+    for (const style of doc.querySelectorAll("style")) {
+      style.textContent = await rewriteCssAssets(style.textContent || "", pageUrl);
+    }
+    for (const node of doc.querySelectorAll("[style]")) {
+      node.setAttribute("style", await rewriteCssAssets(node.getAttribute("style") || "", pageUrl));
+    }
+    return "<!doctype html>\n" + doc.documentElement.outerHTML;
+  }
+
   async function navigate(tab, url) {
+    tab.title = url === HOMEPAGE ? "Start Page" : (() => { try { return new URL(url).hostname; } catch (_) { return "Loading"; } })();
+    tab.favicon = "";
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname === "duckduckgo.com" || parsed.hostname === "www.duckduckgo.com") {
+        if (!parsed.pathname) parsed.pathname = "/";
+        url = parsed.href;
+      }
+    } catch (_) {}
     tab.loading = true;
     tab.url = url;
     updateUI();
@@ -164,7 +288,9 @@
 
     try {
        const response = await GXWisp.fetch(url);
+       if (!response.ok) throw new Error("Upstream returned HTTP " + response.status);
        let content = await response.text();
+       content = await rewriteStaticAssets(content, url);
        const base = new URL(url).origin;
        if (!content.toLowerCase().includes("<base")) {
          if (content.toLowerCase().includes("<head")) content = content.replace(/<head[^>]*>/i, `$&<base href="${url}">`);
@@ -232,7 +358,7 @@
     iframe.id = "frame-" + id;
     $("#web-content").appendChild(iframe);
 
-    const tab = { id, url, title: "Start Page", loading: false, historyStack: [], historyIdx: -1 };
+    const tab = { id, url, title: "Start Page", favicon: "", loading: false, historyStack: [], historyIdx: -1 };
     tabs.push(tab);
     activateTab(id);
     
@@ -273,7 +399,7 @@
       const el = document.createElement("div");
       el.className = `tab ${t.id === activeTabId ? 'active' : ''} ${t.loading ? 'loading' : ''}`;
       
-      let favSrc = getFavicon(t.url);
+      let favSrc = t.favicon || getFavicon(t.url);
       if(t.url === "about:home") favSrc = ""; 
 
       const imgHtml = favSrc ? `<img class="tab-favicon" src="${favSrc}">` : '';
@@ -289,6 +415,8 @@
       el.onclick = (e) => { if(!e.target.classList.contains("tab-close")) activateTab(t.id); };
       container.appendChild(el);
     });
+
+    syncTopSite(tabs.find(x => x.id === activeTabId));
 
     // 2. Manage Content Visibility (Overlay vs Iframe)
     const t = tabs.find(x => x.id === activeTabId);
@@ -349,6 +477,19 @@
   window.addEventListener("message", async (e) => {
     const frame = Array.from(document.querySelectorAll("iframe.web-frame")).find(item => item.contentWindow === e.source);
     if (!frame || !e.data) return;
+    if (e.data.type === "inspector:dom" && e.data.data) {
+      const tab = tabs.find(item => item.id === frame.id.replace("frame-", ""));
+      if (tab) {
+        const nextTitle = String(e.data.data.title || "").trim() || (() => { try { return new URL(tab.url).hostname; } catch (_) { return tab.title; } })();
+        const nextFavicon = typeof e.data.data.favicon === "string" ? e.data.data.favicon : "";
+        const changed = tab.title !== nextTitle || tab.favicon !== nextFavicon;
+        tab.title = nextTitle;
+        tab.favicon = nextFavicon;
+        if (tab.id === activeTabId) syncTopSite(tab);
+        if (changed) updateUI();
+      }
+      return;
+    }
     if (e.data.type === "nav" && typeof e.data.url === "string") {
       window.navigateActiveTab(e.data.url);
       return;
@@ -431,7 +572,8 @@
     GXWisp.openSettings();
   };
   renderBookmarks();
-  createTab(HOMEPAGE);
+  if (pageOnlyMode) document.body.classList.add("page-only");
+  createTab(endpointTarget || HOMEPAGE);
 
 })();
 /* =========================================================================
